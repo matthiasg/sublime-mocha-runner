@@ -134,8 +134,7 @@ class RunMochaWorker(threading.Thread):
 
         os.chdir(folder)
 
-        print "Starting in folder", folder
-        print "Running with view", view
+        print "Starting tests in folder", folder
         
         result = getstatusoutput('mocha -R tap --compilers coffee:coffee-script')
 
