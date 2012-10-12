@@ -4,11 +4,13 @@ import pipes
 import datetime
 import threading
 
-import sublime, sublime_plugin
+import sublime
+import sublime_plugin
+
 
 class RunMochaCommand(sublime_plugin.EventListener):
 
-    TEST_TIMEOUT_IN_SECONDS = 10;
+    TEST_TIMEOUT_IN_SECONDS = 10
 
     worker_thread = None
     description = "Runs Mocha on save"
@@ -25,23 +27,24 @@ class RunMochaCommand(sublime_plugin.EventListener):
     def find_folder(self, view, name):
 
         fn = view.file_name()
-        if not fn: return ''
+        if not fn:
+            return ''
 
         dirs = os.path.normpath(os.path.join(os.path.dirname(fn), name)).split(os.path.sep)
-        
         f = dirs.pop()
 
         while dirs:
             joined = os.path.normpath(os.path.sep.join(dirs + [f]))
-                    
-            if os.path.exists(joined) and os.path.isdir(joined):                
-                return os.path.normpath(os.path.sep.join(dirs))                
+
+            if os.path.exists(joined) and os.path.isdir(joined):
+                return os.path.normpath(os.path.sep.join(dirs))
             else:
                 dirs.pop()
-            
+
     def run_mocha(self, folder, view):
 
-        if self.worker_thread: return
+        if self.worker_thread:
+            return
 
         self.worker_started = datetime.datetime.now()
 
@@ -57,9 +60,9 @@ class RunMochaCommand(sublime_plugin.EventListener):
         if self.worker_thread.is_alive():
             view.set_status('Mocha', 'Testing ... ' + runningTime.seconds + 's')
 
-            if runningTime < self.TEST_TIMEOUT_IN_SECONDS
-                sublime.set_timeout(lambda: self.check_for_completion(view), 20)          
-            else
+            if runningTime < self.TEST_TIMEOUT_IN_SECONDS:
+                sublime.set_timeout(lambda: self.check_for_completion(view), 20)
+            else:
                 self.worker_thread.stop()
 
             return
@@ -71,17 +74,17 @@ class RunMochaCommand(sublime_plugin.EventListener):
         self.worker_thread = None
 
     def output_result(self, view, result):
-        
-        message = self.build_status_message(result)                
+
+        message = self.build_status_message(result)
         details = self.build_details(result)
 
         self.output_message(view, message, details)
-        
+
         if result.success:
             self.hide_output_panel(view)
         else:
             self.show_output_panel(view)
-    
+
     def build_status_message(self, result):
 
         if result.success:
@@ -91,7 +94,7 @@ class RunMochaCommand(sublime_plugin.EventListener):
 
         message = self.append_test_info(message, result)
         message = self.append_timestamp(message)
-    
+
         return message
 
     def append_test_info(self, message, result):
@@ -109,8 +112,8 @@ class RunMochaCommand(sublime_plugin.EventListener):
         return text + " - " + time + "\n"
 
     def build_details(self, result):
-        
-        details = ""    
+
+        details = ""
 
         for line in result.lines_not_ok:
             details = details + line + "\n"
@@ -120,35 +123,38 @@ class RunMochaCommand(sublime_plugin.EventListener):
         for errline in result.errlines:
             details = details + errline + "\n"
 
-        return details;
+        return details
 
     def output_message(self, view, message, details):
 
-        view.set_status('Mocha', message )
+        view.set_status('Mocha', message)
 
-        out = view.window().get_output_panel('run_mocha')                
-        edit = out.begin_edit()        
+        out = view.window().get_output_panel('run_mocha')
+        edit = out.begin_edit()
 
         out.erase(edit, sublime.Region(0, out.size()))
-        
-        out.insert(edit, out.size(), message)        
+
+        out.insert(edit, out.size(), message)
         out.insert(edit, out.size(), details)
-        
-        out.show(out.size())        
+
+        out.show(out.size())
         out.end_edit(edit)
-    
-    def show_output_panel(self, view):    
+
+    def show_output_panel(self, view):
         self.run_panel_command(view, 'show_panel')
-    def hide_output_panel(self, view):    
+
+    def hide_output_panel(self, view):
         self.run_panel_command(view, 'hide_panel')
-    def run_panel_command(self, view, command):    
+
+    def run_panel_command(self, view, command):
         view.window().run_command(command, {'panel': 'output.run_mocha'})
+
 
 class MochaResult:
 
-    def __init__(self, success, lines, errlines):
+    def __init__(self, lines, errlines):
 
-        self.success = success
+        self.success = True
         self.lines = lines
         self.errlines = errlines
         self.lines_ok = []
@@ -159,27 +165,32 @@ class MochaResult:
         self.number_of_failed_tests = 0
 
         for line in lines:
-        
+
             if line.startswith('ok'):
                 self.lines_ok.append(line)
                 self.number_of_tests = self.number_of_tests + 1
                 self.number_of_successful_tests = self.number_of_successful_tests + 1
-            elif line.startswith('not ok'):       
+            elif line.startswith('not ok'):
                 self.lines_not_ok.append(line)
                 self.number_of_tests = self.number_of_tests + 1
                 self.number_of_failed_tests = self.number_of_failed_tests + 1
+                self.success = False
             else:
                 self.lines_other.append(line)
+
+        if len(self.errlines) > 0:
+            self.success = False
+
 
 class RunMochaWorker(threading.Thread):
 
     def __init__(self, folder, view):
-    
+
         self.folder = folder
         self.view = view
         self.result = None
 
-        threading.Thread.__init__(self)  
+        threading.Thread.__init__(self)
 
     def run(self):
 
@@ -190,12 +201,13 @@ class RunMochaWorker(threading.Thread):
             self.result = None
         except Exception, err:
             print "Unexpected error running mocha:", sys.exc_info()[0], str(err)
-            self.result = None       
+            self.result = None
 
     def stop(self):
 
-        if self.process 
+        if self.process:
             self.process.terminate()
+
         self.join()
 
     def run_mocha(self, folder, view):
@@ -203,15 +215,14 @@ class RunMochaWorker(threading.Thread):
         os.chdir(folder)
 
         print "Starting tests in folder", folder
-        
-        self.process = createProcess('mocha -R tap --compilers coffee:coffee-script')
-        result = run(self.process)
 
-        success = result[0]==0
+        self.process = self.createProcess('mocha -R tap --compilers coffee:coffee-script')
+        result = self.start(self.process)
+
         lines = result[1].splitlines()
         errlines = result[2].splitlines()
-        
-        return MochaResult(success, lines, errlines)        
+
+        return MochaResult(lines, errlines)
 
     def createProcess(cmd):
         """Return (status, output) of executing cmd in a shell."""
@@ -219,18 +230,14 @@ class RunMochaWorker(threading.Thread):
         import subprocess
         process = subprocess.Popen(cmd, shell=True, universal_newlines=True,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    
+
         return process
 
-    def run(process): 
-            
-        stdoutdata,stderrdata = process.communicate()
-        
-        if rc is None:
-            rc = 0
+    def start(process):
+
+        stdoutdata, stderrdata = process.communicate()
 
         stdoutput = pipes.quote(stdoutdata)
         erroutput = pipes.quote(stderrdata)
 
-        return rc, stdoutput, erroutput
-
+        return stdoutput, erroutput
