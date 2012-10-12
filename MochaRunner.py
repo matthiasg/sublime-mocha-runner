@@ -8,6 +8,8 @@ import sublime, sublime_plugin
 
 class RunMochaCommand(sublime_plugin.EventListener):
 
+    TEST_TIMEOUT_IN_SECONDS = 10;
+
     worker_thread = None
     description = "Runs Mocha on save"
 
@@ -41,6 +43,8 @@ class RunMochaCommand(sublime_plugin.EventListener):
 
         if self.worker_thread: return
 
+        self.worker_started = datetime.datetime.now()
+
         self.worker_thread = RunMochaWorker(folder, view)
         self.worker_thread.start()
 
@@ -48,14 +52,22 @@ class RunMochaCommand(sublime_plugin.EventListener):
 
     def check_for_completion(self, view):
 
+        runningTime = datetime.datetime.now() - self.worker_started
+
         if self.worker_thread.is_alive():
-            view.set_status('Mocha', 'Testing ...')
-            sublime.set_timeout(lambda: self.check_for_completion(view), 20)          
+            view.set_status('Mocha', 'Testing ... ' + runningTime.seconds + 's')
+
+            if runningTime < self.TEST_TIMEOUT_IN_SECONDS
+                sublime.set_timeout(lambda: self.check_for_completion(view), 20)          
+            else
+                self.worker_thread.stop()
+
             return
 
         if self.worker_thread.result:
             self.output_result(view, self.worker_thread.result)
 
+        self.worker_started = None
         self.worker_thread = None
 
     def output_result(self, view, result):
@@ -103,6 +115,11 @@ class RunMochaCommand(sublime_plugin.EventListener):
         for line in result.lines_not_ok:
             details = details + line + "\n"
 
+        details = details + "Error Output:\n"
+
+        for errline in result.errlines:
+            details = details + errline + "\n"
+
         return details;
 
     def output_message(self, view, message, details):
@@ -129,10 +146,11 @@ class RunMochaCommand(sublime_plugin.EventListener):
 
 class MochaResult:
 
-    def __init__(self, success, lines):
+    def __init__(self, success, lines, errlines):
 
         self.success = success
         self.lines = lines
+        self.errlines = errlines
         self.lines_ok = []
         self.lines_not_ok = []
         self.lines_other = []
@@ -141,8 +159,7 @@ class MochaResult:
         self.number_of_failed_tests = 0
 
         for line in lines:
-            print 'checking line:', line
-
+        
             if line.startswith('ok'):
                 self.lines_ok.append(line)
                 self.number_of_tests = self.number_of_tests + 1
@@ -175,6 +192,11 @@ class RunMochaWorker(threading.Thread):
             print "Unexpected error running mocha:", sys.exc_info()[0], str(err)
             self.result = None       
 
+    def stop(self):
+
+        if self.process 
+            self.process.terminate()
+        self.join()
 
     def run_mocha(self, folder, view):
 
@@ -182,27 +204,33 @@ class RunMochaWorker(threading.Thread):
 
         print "Starting tests in folder", folder
         
-        result = getstatusoutput('mocha -R tap --compilers coffee:coffee-script')
+        self.process = createProcess('mocha -R tap --compilers coffee:coffee-script')
+        result = run(self.process)
 
         success = result[0]==0
         lines = result[1].splitlines()
+        errlines = result[2].splitlines()
         
-        return MochaResult(success, lines)        
+        return MochaResult(success, lines, errlines)        
 
-def getstatusoutput(cmd): 
+    def createProcess(cmd):
         """Return (status, output) of executing cmd in a shell."""
         """This new implementation should work on all platforms."""
         import subprocess
         process = subprocess.Popen(cmd, shell=True, universal_newlines=True,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        output = str.join("", process.stdout.readlines()) 
-        
-        rc = process.wait()
+    
+        return process
+
+    def run(process): 
+            
+        stdoutdata,stderrdata = process.communicate()
         
         if rc is None:
             rc = 0
 
-        output = pipes.quote(output)
+        stdoutput = pipes.quote(stdoutdata)
+        erroutput = pipes.quote(stderrdata)
 
-        return rc, output
+        return rc, stdoutput, erroutput
 
