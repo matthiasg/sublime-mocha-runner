@@ -3,6 +3,8 @@ import sys
 import pipes
 import datetime
 import threading
+import subprocess
+import traceback
 
 import sublime
 import sublime_plugin
@@ -58,9 +60,9 @@ class RunMochaCommand(sublime_plugin.EventListener):
         runningTime = datetime.datetime.now() - self.worker_started
 
         if self.worker_thread.is_alive():
-            view.set_status('Mocha', 'Testing ... ' + runningTime.seconds + 's')
+            view.set_status('Mocha', 'Testing ... ' + str(runningTime.total_seconds()) + 's')
 
-            if runningTime < self.TEST_TIMEOUT_IN_SECONDS:
+            if runningTime.total_seconds() < self.TEST_TIMEOUT_IN_SECONDS:
                 sublime.set_timeout(lambda: self.check_for_completion(view), 20)
             else:
                 self.worker_thread.stop()
@@ -118,7 +120,8 @@ class RunMochaCommand(sublime_plugin.EventListener):
         for line in result.lines_not_ok:
             details = details + line + "\n"
 
-        details = details + "Error Output:\n"
+        if not result.success:
+            details = details + "ERROR:\n"
 
         for errline in result.errlines:
             details = details + errline + "\n"
@@ -164,21 +167,22 @@ class MochaResult:
         self.number_of_successful_tests = 0
         self.number_of_failed_tests = 0
 
-        for line in lines:
+        if lines is not None:
+            for line in lines:
 
-            if line.startswith('ok'):
-                self.lines_ok.append(line)
-                self.number_of_tests = self.number_of_tests + 1
-                self.number_of_successful_tests = self.number_of_successful_tests + 1
-            elif line.startswith('not ok'):
-                self.lines_not_ok.append(line)
-                self.number_of_tests = self.number_of_tests + 1
-                self.number_of_failed_tests = self.number_of_failed_tests + 1
-                self.success = False
-            else:
-                self.lines_other.append(line)
+                if line.startswith('ok'):
+                    self.lines_ok.append(line)
+                    self.number_of_tests = self.number_of_tests + 1
+                    self.number_of_successful_tests = self.number_of_successful_tests + 1
+                elif line.startswith('not ok'):
+                    self.lines_not_ok.append(line)
+                    self.number_of_tests = self.number_of_tests + 1
+                    self.number_of_failed_tests = self.number_of_failed_tests + 1
+                    self.success = False
+                else:
+                    self.lines_other.append(line)
 
-        if len(self.errlines) > 0:
+        if errlines is not None and len(self.errlines) > 0:
             self.success = False
 
 
@@ -197,10 +201,12 @@ class RunMochaWorker(threading.Thread):
         try:
             self.result = self.run_mocha(self.folder, self.view)
         except RuntimeError, err:
-            print "Unexpected error running mocha:", str(err)
+            print "Unexpected error running mocha:"
+            traceback.print_tb(sys.last_traceback)
             self.result = None
         except Exception, err:
             print "Unexpected error running mocha:", sys.exc_info()[0], str(err)
+            traceback.print_tb(sys.last_traceback)
             self.result = None
 
     def stop(self):
@@ -217,27 +223,27 @@ class RunMochaWorker(threading.Thread):
         print "Starting tests in folder", folder
 
         self.process = self.createProcess('mocha -R tap --compilers coffee:coffee-script')
-        result = self.start(self.process)
+        result = self.waitForProcess(self.process)
 
-        lines = result[1].splitlines()
-        errlines = result[2].splitlines()
+        lines = result[0].splitlines()
+        errlines = result[1].splitlines()
 
         return MochaResult(lines, errlines)
 
-    def createProcess(cmd):
-        """Return (status, output) of executing cmd in a shell."""
-        """This new implementation should work on all platforms."""
-        import subprocess
-        process = subprocess.Popen(cmd, shell=True, universal_newlines=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    def createProcess(self, cmd):
+        return subprocess.Popen(cmd, shell=True, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-        return process
-
-    def start(process):
+    def waitForProcess(self, process):
 
         stdoutdata, stderrdata = process.communicate()
 
-        stdoutput = pipes.quote(stdoutdata)
-        erroutput = pipes.quote(stderrdata)
+        stdoutput = self.quote(stdoutdata)
+        erroutput = self.quote(stderrdata)
 
         return stdoutput, erroutput
+
+    def quote(self, str):
+        if str is None:
+            return ''
+        else:
+            return pipes.quote(str)
