@@ -60,9 +60,9 @@ class RunMochaCommand(sublime_plugin.EventListener):
         runningTime = datetime.datetime.now() - self.worker_started
 
         if self.worker_thread.is_alive():
-            view.set_status('Mocha', 'Testing ... ' + str(runningTime.total_seconds()) + 's')
+            view.set_status('Mocha', 'Testing ... ' + str(runningTime.seconds) + 's')
 
-            if runningTime.total_seconds() < self.TEST_TIMEOUT_IN_SECONDS:
+            if runningTime.seconds < self.TEST_TIMEOUT_IN_SECONDS:
                 sublime.set_timeout(lambda: self.check_for_completion(view), 20)
             else:
                 self.worker_thread.stop()
